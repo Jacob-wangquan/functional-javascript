@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<script src="lib/jquery.min.js"></script>
+<script src="lib/underscore-min.js"></script>
+
+<script>
+
+    /********************
+     * javascript函数式编程
+     ********************/
+
+    /************
+    * 第一章
+    ************/
+
+    /*
+    * 函数式编程 连续执行()()
+    * (1) 一个对‘存在’的抽象函数的定义 =》 确定抽象，并为其构建函数
+    * (2) 一个建立在存在函数之上的，对‘真’的抽象函数的定义 =》 利用已有的函数来构建更为复杂的抽象
+    * (3) 通过其他函数来使用上面的二个函数，以实现更多的行为 =》 通过将现有的函数传给其他的函数来构建更加复杂的抽象
+    * */
+    function splat(fun) {
+        return function (array) {
+            return fun.apply(null, array);
+        };
+    }
+    var addArrayElements = splat(function (x,y) { return x + y});
+    addArrayElements([1,2]); //3
+    splat(function (x,y) { return x + y})([1,5]);
+
+    //=> (function(x,y) { return x + y }).apply(null, [1,2]);
+  
+    function unsplat(fun) {
+        return function () {
+            return fun.call(null, _.toArray(arguments));
+        };
+    }
+    var joinElements = unsplat(function(array){ return array.join(' - ') });
+    joinElements(1,5,8);
+
+    //=> console.log((function (array) {return array.join('-') }).call(null, _.toArray([1,5,8])));
+
+//    function parseAge(age) {
+//        if(!_.isString(age)) throw new Error('expecting a string');
+//        var a;
+//        console.log('attempting to parse an age');
+//        a = parseInt(age, 10);
+//        if(_.isNaN(a)){
+//            console.log(['could not parse age:', age].join(' '));
+//            a = 0;
+//        }
+//        return a;
+//    }
+//    console.log(parseAge(42));
+    // 抽象出不同的函数
+    function fail(thing) {
+        throw new Error(thing);
+    }
+    function warn(thing) {
+        console.log(['warning', thing].join(' '));
+    }
+    function note(thing) {
+        console.log(['note', thing].join(' '));
+    }
+    function parseAge(age) {
+        if(!_.isString(age)) fail('expecting a string');
+        var a;
+        note('attempting to parse an age');
+        a = parseInt(age, 10);
+        if(_.isNaN(a)){
+            warn(['could not parse age:', age].join(' '));
+            a = 0;
+        }
+        return a;
+    }
+    //console.log(parseAge('aa'));
+
+    /*
+    * 以函数为行为单位
+    * */
+    var letters = ['a','b','c'];
+    function nth(a, index) {
+        if(!_.isNumber(index)) fail('expecting a number as the index');
+        if(!isIndexed(a)) fail('not supported on non-indexed type');
+        if((index < 0) || (index > a.length - 1)) fail('index value is out of bounds');
+        return a[index];
+    }
+    function isIndexed(data) {
+        return _.isArray(data) || _.isString(data);
+    }
+    function second(a) {
+        return nth(a, 1);
+    }
+    //console.log(nth(letters, 0));
+   // console.log(second(letters));
+
+    function compareLessThanEqual(x,y) {
+        if(x < y) return -1;
+        if(x > y) return 1;
+        return 0;
+    }
+    function lessOrEqual(x,y) {
+        return x <= y;
+    }
+    function comparator(pred) {
+        return function (x, y) {
+            if(truthy(pred(x,y))) return -1;
+            else if(truthy(pred(y, x))) return 1;
+            else return 0;
+        };
+    }
+//    console.log([1,5,-100,-1,-1,40,30].sort(compareLessThanEqual));
+//    console.log([1,5,-100,-1,-1,40,30].sort(comparator(lessOrEqual)));
+
+    /*
+    * 数据抽象
+    * */
+    function lameCSV(str) {
+        return _.reduce(str.split('\n'), function (table, row) {
+            table.push(_.map(row.split(','), function (c) {
+                return c.trim();
+            }));
+            return table;
+        }, []);
+    }
+    var peopleTable = lameCSV("name,age,hair\nMerble,35,red\nnBot,66,blonde");
+    //console.table(peopleTable);
+    
+    function selectNames(table) {
+        return _.rest(_.map(table, _.first));
+    }
+    function selectHairColor(table) {
+        return _.rest(_.map(table, function (row) {
+            return nth(row, 2);
+        }));
+    }
+    var mergeResults = _.zip;
+    //console.log(selectNames(peopleTable));
+    //console.log(selectHairColor(peopleTable));
+    //console.log(mergeResults(selectNames(peopleTable),selectHairColor(peopleTable)));
+    
+    /*
+    * existy  &&  truthy
+    * */
+    function existy(x) {
+       return x != null; 
+    }
+    function truthy(x) {
+        return (x !== false) && existy(x);
+    }
+    //console.log(truthy(''));
+    function doWhen(cond, action) {
+        if(truthy(cond)){
+            return action();
+        }else{
+            return undefined;
+        }
+    }
+    function executeIfHasField(target, name) {
+        return doWhen(existy(target[name]), function () {
+            var result = _.result(target, name);
+            console.log(['the result is', result].join(' '));
+            return result;
+        });
+    }
+//    console.log(executeIfHasField([1,2,3],'reverse'));
+//    console.log(executeIfHasField([1,2,3],'nowhere'));
+//
+//    console.log([null, undefined, 1,2,false].map(existy));
+
+
+    /************
+     * 第二章
+     ************/
+    /*
+    * Applicative编程--函数A作为参数提供给函数B
+    * */
+    var num = [1,2,3,4,5];
+    function doubleAll(array) {
+        return _.map(array, function(n){ return n*2 });
+    }
+    function average(array) {
+        var sum = _.reduce(array, function(a,b){ return a+b });
+        return sum / _.size(array);
+    }
+    function onlyEven(array) {
+        return _.filter(array, function(n){ return (n%2) === 0 });
+    }
+//    console.log(doubleAll(num));
+//    console.log(average(num));
+//    console.log(onlyEven(num));
+
+    function allOf() {
+        return _.reduceRight(arguments, function (truth, f) {
+            return truth && f();
+        }, true);
+    }
+
+    function anyOf() {
+        return _.reduceRight(arguments, function (truth, f) {
+            return truth || f();
+        }, false);
+    }
+    function T() { return true }
+    function F() { return false }
+//    console.log(allOf());
+//    console.log(allOf(T, T));
+//    console.log(allOf(T,T,F));
+//    console.log(anyOf(T,T,F));
+//    console.log(anyOf(F,F,F));
+//    console.log(anyOf());
+
+    function complement(pred) {
+        return function () {
+            return !pred.apply(null, _.toArray(arguments));
+        }
+    }
+
+//    console.log(_.find(['a','b','c',3,'d'], _.isNumber));
+//    console.log(_.reject(['a','b','c',3,'d'], _.isNumber));
+//    console.log(_.reject(['a','b','c',3,'d'], complement(_.isNumber)));
+
+    var people = [
+        {name:'rick',age:30},
+        {name:'jack',age:24}
+    ];
+    var albums = [
+        {title:'aaa', genre:'metal'},
+        {title:'bbb', genre:'dub'},
+        {title:'ccc', genre:'metal'}
+    ];
+    //console.table(_.sortBy(people, function(p){ return p.age }));
+    //console.table(_.groupBy(albums, function(a){ return a.genre }));
+    //console.log(_.countBy(albums, function(a){ return a.genre }));
+
+    function cat() {
+        var head = _.first(arguments);
+        if(existy(head)){
+            return head.concat.apply(head, _.rest(arguments));
+        }else{
+            return [];
+        }
+    }
+    function construct(head, tail) {
+        return cat([head], _.toArray(tail));
+    }
+//    console.log(cat([1,2,3],[4,5],[6,7]));
+//    console.log(construct(33,[6,7]));
+
+    function mapcat(fun, coll) {
+        return cat.apply(null, _.map(coll, fun));
+    }
+    //console.log(mapcat(function (e) { return construct(e,[',']); }, [1,3,5]));
+    function butLast(coll) {
+        return _.toArray(coll).slice(0, -1);
+    }
+    function interpose(inter, coll) {
+        return butLast(mapcat(function (e) {
+            return construct(e, [inter]);
+        }, coll))
+    }
+    //console.log(interpose(',', [1,2,3]));
+
+    var zombie = {name:'bob', film:'day of the date'};
+    var zombie2 = [{name:'bob', film:'day of the date'},{name:'aaa', film:'hello'},{name:'ccc'}];
+
+    var recombine = _.object(_.map(_.pairs(zombie), function (pair) {
+        return [pair[0].toUpperCase(), pair[1]];
+    }));
+//    console.log(_.keys(zombie));
+//    console.log(_.values(zombie));
+//    console.log(_.pairs(zombie));
+//    console.log(_.pluck(zombie2, 'name'));
+//    console.log(recombine);
+
+    var getFilm = _.pluck(_.map(zombie2, function (obj) {
+        return _.defaults(obj, {film: 'unknown'});
+    }), 'film');
+    //console.log(getFilm);
+
+    var person = {name:'jacob',password:'111',token:'aaa'};
+    //console.log(_.omit(person, 'password', 'token'));
+    //console.log(_.pick(person, 'password', 'token'));
+
+    var library = [
+        {title:'SICP',isbn:'022', ed: 1},
+        {title:'SICP',isbn:'022', ed: 2},
+        {title:'JOY',isbn:'033', ed: 1}
+    ];
+//    console.log(_.findWhere(library, {title:'SICP', ed: 2}));
+//    console.log(_.where(library, {title:'SICP'}));
+//    console.log(_.pluck(library,'title'));
+    function project(table, keys) {
+        return _.map(table, function (obj) {
+            return _.pick.apply(null, construct(obj, keys));
+        });
+    }
+    var editionResults = project(library, ['title','isbn']);
+    var isbnResults = project(editionResults, ['isbn']);
+//    console.log(editionResults);
+//    console.log(isbnResults);
+//    console.log(_.pluck(isbnResults, 'isbn'));
+
+    function rename(obj, newNames) {
+        return _.reduce(newNames, function (o, nu, old) {
+            if(_.has(obj, old)){
+                o[nu] = obj[old];
+                return o;
+            }else {
+                return o;
+            }
+        }, _.omit.apply(null, construct(obj, _.keys(newNames))));
+    }
+    //console.log(rename({a:1,b:2},{'a': 'A'}));
+
+    function as(table, newNames) {
+        return _.map(table, function (obj) {
+            return rename(obj, newNames);
+        })
+    }
+    //console.log(as(library, {ed: 'edition'}));
+    //console.log(project(as(library, {ed: 'edition'}), ['edition']));
+
+    function restrict(table, pred) {
+        return _.reduce(table, function (newTable, obj) {
+            if(truthy(pred(obj))){
+                return newTable;
+            }else{
+                return _.without(newTable, obj);
+            }
+        }, table);
+    }
+    //console.table(restrict(library, function(book){ return book.ed > 1}));
+    var books = restrict(
+                 project( as(library, {ed:'edition'}),
+                    ['title', 'isbn', 'edition']),
+                function (book) {
+                    return book.edition > 1;
+                });
+    //console.table(books);
+
+    /************
+     * 第三章 作用域与闭包
+     ************/
+    function makeEmptyObject() {
+        return new Object();
+    }
+    //动态作用域
+    var globals = {};
+    function makeBindFun(resolver) {
+        return function (k, v) {
+            var stack = globals[k] || [];
+            globals[k] = resolver(stack, v);
+            return globals;
+        };
+    }
+    var stackBinder = makeBindFun(function (stack, v) {
+        stack.push(v);
+        return stack;
+    });
+    var stackUnbinder = makeBindFun(function (stack) {
+       stack.pop();
+        return stack;
+    });
+    var dynamicLookup = function (k) {
+        var slot = globals[k] || [];
+        return _.last(slot);
+    };
+//    console.log(stackBinder('a',1));
+//    console.log(stackBinder('b',100));
+//    console.log(dynamicLookup('a'));
+//    console.log(stackBinder('a','aaa'));
+//    console.log(globals);
+
+    function globalThis() {
+        return this;
+    }
+    // bind函数 锁定this使其不被修改
+    var nopeThis = _.bind(globalThis, 'nope');
+    //console.log(nopeThis.call('wat'));
+
+    var target = {
+        name:'the right value',
+        aux: function() { return this.name; },
+        act: function() { return this.aux(); }
+    };
+    //console.log(target.act.call('wat')); //报错
+    _.bindAll(target, 'aux', 'act');
+   // console.log(target.act.call('wat'));
+
+    function strangeIdentity(n) {
+        for(var i=0;i<n;i++){
+            return i;
+        }
+    }
+
+    function f() {
+        this['a'] = 200;
+        return this['a'] + this['b'];
+    }
+    var gg = {'b': 2};
+    //console.log(f.call(_.clone(gg)));
+    //console.log(gg);
+
+    //什么是闭包：闭包是一个函数，捕获作用域内的外部绑定。这些绑定是为了之后使用而被定义的。
+    function whatWasTheLocal() {
+        var CAPTURED = 'oh hai';
+        return function () {
+            return 'the local was:'+CAPTURED;
+        }
+    }
+    var reportLocal = whatWasTheLocal();
+    //console.log(reportLocal());
+
+    function createScaleFunction(FACTOR) {
+        return function (v) {
+            return _.map(v, function (n) {
+                return ( n * FACTOR);
+            });
+        };
+    }
+    var scale10 = createScaleFunction(10);
+    //console.log(scale10([1,2,3]));
+    
+    function createWeirdScaleFunction(FACTOR) {
+        return function (v) {
+            this['FACTOR'] = FACTOR;
+            var captures = this;
+
+            return _.map(v, _.bind(function (n) {
+                return (n * this['FACTOR']);
+            }, captures));
+        };
+    }
+    var scale20 = createWeirdScaleFunction(20);
+    //console.log(scale20.call({}, [5,6,7]));
+
+    function makeAddr(CAPTURE) {
+        return function (free) {
+            return free + CAPTURE;
+        };
+    }
+    var add10 = makeAddr(10);
+    //console.log(add10(13));
+
+    function averageDamp(FUN) {
+        return function (n) {
+            return average([n, FUN(n)]);
+        }
+    }
+    var averageSq = averageDamp(function(n){ return n * n});
+    //console.log(averageSq(10));
+
+    function captureShadow(SHADOWED) {
+        return function (SHADOWED) {
+            return SHADOWED + 1;
+        }
+    }
+    var closureShadow = captureShadow(108);
+    //console.log(closureShadow(2));
+
+    function showObject(OBJ) {
+        return function () {
+            return OBJ;
+        }
+    }
+    var o = {a:43};
+    var showO = showObject(o);
+    //console.log(showO());
+    //o.newField = 108;
+    //console.log(showO());
+
+    //把捕获的变量作为私有数据
+    var pingpong = (function () {
+        var PRIVATE = 0;
+        return {
+            inc: function (n) {
+                return PRIVATE += n;
+            },
+            dec: function (n) {
+                return PRIVATE -= n;
+            }
+        };
+    })();
+
+
+    function plucker(FIELD) {
+        return function (obj) {
+            return (obj && obj[FIELD]);
+        };
+    }
+    //var best = {title:'infinite jest',author:'dfw'};
+    //var getTitle = plucker('title');
+    //从对象中根据字段得到值
+    //console.log(getTitle(best));
+
+    //从数组中
+    var boo = [{title:'aa'},{title:'bb'},{stars:'20'}];
+    var third = plucker(2);
+    //console.log(third(boo));
+    //console.log(_.filter(boo, getTitle));
+
+
+    /************
+     * 第三章 高阶函数
+     ************/
+   // console.log(_.max([1,2,3]));
+    var peoples = [{name:'fred',age:65},{name:'lucy', age:30}];
+    //console.log(_.max(peoples, function(p){ return p.age;}));
+
+    function finder(valueFun, bestFun, coll) {
+        return _.reduce(coll, function (best, current) {
+            var bestValue = valueFun(best);
+            var currentValue = valueFun(current);
+            return (bestValue === bestFun(bestValue, currentValue)) ? best : current;
+        })
+    }
+    //console.log(finder(_.identity, Math.max, [1,3,5,2,9]));
+    //console.log(finder(plucker('age'), Math.max, peoples));
+
+    function best(fun, coll) {
+        return _.reduce(coll, function (x, y) {
+            return fun(x, y) ? x : y;
+        })
+    }
+    //console.log(best(function(x, y){ return x > y;}, [1,3,5,9,7]));
+
+    //重复 反复 条件迭代
+    function repeat(times, VALUE) {
+        return _.map(_.range(times), function(){ return VALUE;});
+    }
+    //console.log(repeat(3,'major'));
+
+    function repeatedly(times, fun) {
+        return _.map(_.range(times), fun);
+    }
+    //console.log(repeatedly(3, function(){ return Math.floor(Math.random() * 10) + 1}));
+
+    function iterateUntil(fun, check, init) {
+        var ret = [];
+        var result = fun(init);
+        while(check(result)){
+            ret.push(result);
+            result = fun(result);
+        }
+        return ret;
+    }
+   // console.log(iterateUntil(function (n) {return n+n;}, function (n) {return n <= 1024;}, 1));
+
+    function always(VALUE) {
+        return function () {
+            return VALUE;
+        }
+    }
+    var fff = always(function(){});
+    var ggg = always(function(){});
+   // console.log(fff === ggg);
+   // console.log(repeatedly(3, always('oh shit')));
+
+    function invoker(NAME, METHOD) {
+        return function(target) {
+            if(!existy(target)) fail('must provide a target');
+            var targetMethod = target[NAME];
+            var args = _.rest(arguments);
+
+            return doWhen( (existy(targetMethod) && METHOD === targetMethod), function () {
+                return targetMethod.apply(target, args);
+            })
+        }
+    }
+    var rev = invoker('reverse', Array.prototype.reverse);
+    //console.log(_.map([[1,2,3]], rev));
+    
+    function uniqueString(len) {
+        return Math.random().toString(36).substr(2, len);
+    }
+    //console.log(uniqueString(10));
+    function uniqueString2(prefix) {
+        return [prefix, new Date().getTime()].join('');
+    }
+    //console.log(uniqueString2('argento'));
+
+    function makeUniqueStringFunction(start) {
+        var COUNT = start;
+        return function (prefix) {
+            return [prefix, COUNT++].join('');
+        }
+    }
+    var uniqueStr = makeUniqueStringFunction(0);
+    //console.log(uniqueStr('dar'));
+    //console.log(uniqueStr('dar'));
+
+    var omgenerator = (function (init) {
+        var COUNT = init;
+        return {
+            uniqueString: function (prefix) {
+                return [prefix, COUNT++].join('');
+            }
+        };
+    })(0);
+    //console.log(omgenerator.uniqueString('click-'));
+    //console.log(omgenerator.uniqueString('click-'));
+
+    function fnull(fun) {
+        var defaults = _.rest(arguments);
+        return function () {
+            var args = _.map(arguments, function (e, i) {
+                return existy(e) ? e : defaults[i];
+            });
+            return fun.apply(null, args);
+        };
+    }
+    var nums = [1,2,3,null, 5];
+    var safeMult = fnull(function(total, n){ return total * n;}, 1, 1);
+    //console.log(_.reduce(nums, safeMult));
+
+    function defaults(d) {
+        return function (o, k) {
+            var val = fnull(_.identity, d[k]);
+            return o && val(o[k]);
+        }
+    }
+    function doSomething(config) {
+        var lookup = defaults({critical: 108});
+        return lookup(config, 'critical');
+    }
+    //console.log(doSomething({critical: 9}));
+    
+    //判断对象是否有效
+    function checker() {
+        var validators = _.toArray(arguments);
+        return function (obj) {
+            return _.reduce(validators, function (errs, check) {
+                if(check(obj)){
+                    return errs;
+                }else{
+                    return _.chain(errs).push(check.message).value();
+                }
+            }, []);
+        }
+    }
+    var alwaysPasses = checker(always(true), always(true));
+    //console.log(alwaysPasses({}));
+    var fails = always(false);
+    fails.message = 'a failure in life';
+    var alwaysFails = checker(fails);
+    //console.log(alwaysFails({}));
+
+    function validator(message, fun) {
+        var f= function () {
+            return fun.apply(fun, arguments);
+        };
+        f['message'] = message;
+        return f;
+    }
+    var gonnaFail = checker(validator('zomg!', always(false)));
+
+    function aMap(obj) {
+        return _.isObject(obj);
+    }
+    var checkCommand = checker(validator("must be a map", aMap));
+    //console.log(checkCommand({}));
+
+    function hasKeys() {
+        var KEYS = _.toArray(arguments);
+        var fun = function (obj) {
+            return _.every(KEYS, function (k) {
+                return _.has(obj, k);
+            });
+        };
+        fun.message = cat(['must have values for keys:'],KEYS).join(' ');
+        return fun;
+    }
+
+    var checkCommand2 = checker(validator('must be a map', aMap), hasKeys('msg', 'type'));
+    console.log(checkCommand2({msg:'blob', type: 'display'}));
+    console.log(checkCommand2(33));
+</script>
+</body>
+</html>
